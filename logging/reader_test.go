@@ -24,4 +24,5 @@ func TestLogReader(t *testing.T) {
 }
 
 func BenchmarkLogReader(b *testing.B) {
+	b.ReportAllocs()
 }

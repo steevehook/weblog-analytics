@@ -5,3 +5,7 @@ build:
 test:
 	@echo "running all tests"
 	go test -v ./...
+
+bench:
+	@echo "running all benchmarks"
+	go test -bench . ./...

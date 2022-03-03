@@ -7,6 +7,7 @@
 ### Build
 
 ```shell
+# compiles and generates a binary for log-reader inside the ./bin directory
 make build
 ``` 
 
@@ -22,5 +23,8 @@ make build
 ### Test
 
 ```shell
+# runs all the tests present in test files
 make test
+# runs all the benchmarks present in test files
+make bench
 ```
