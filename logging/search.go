@@ -1,34 +1,15 @@
-package main
+package logging
 
 import (
 	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
-	"path"
 	"strconv"
 )
 
-func main() {
-	filePath := path.Join("testdata", "numbers.txt")
-	file, err := os.Open(filePath)
-	defer func() {
-		_ = file.Close()
-	}()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	offset, err := binarySearch(file, 14)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(offset)
-}
-
-func binarySearch(f *os.File, search int64) (int64, error) {
+func search(f *os.File, search int64) (int64, error) {
 	var top, bottom, pos, prevPos int64
 	scanLines := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		advance, token, err = bufio.ScanLines(data, atEOF)

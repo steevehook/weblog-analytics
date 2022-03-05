@@ -2,7 +2,6 @@ package logging
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -108,10 +107,7 @@ func (r *LogReader) write(w io.Writer) error {
 		return nil
 	}
 
-	err := r.searchFile(r.filesInfo[readFrom])
-	if err != nil {
-		return err
-	}
+	// search call
 
 	// read one file in reverse order and parse the log lines to check for datetime
 	// last written log in the file equals to the file ModTime()
@@ -120,145 +116,20 @@ func (r *LogReader) write(w io.Writer) error {
 	//	return err
 	//}
 
-	//others := r.filesInfo[readFrom+1 : len(r.filesInfo)]
-	//for _, fi := range others {
-	//	chunks := r.stream(fi)
-	//	for c := range chunks {
-	//		if c.err != nil {
-	//			return c.err
-	//		}
-	//
-	//		_, err := fmt.Fprintln(w, c.line)
-	//		if err != nil {
-	//			return err
-	//		}
-	//	}
-	//}
+	others := r.filesInfo[readFrom+1 : len(r.filesInfo)]
+	for _, fi := range others {
+		chunks := r.stream(fi)
+		for c := range chunks {
+			if c.err != nil {
+				return c.err
+			}
 
-	return nil
-}
-
-func (r *LogReader) searchFile(fi fileInfo) error {
-	filePath := path.Join(r.cfg.Directory, fi.name)
-	file, err := os.Open(filePath)
-	defer func() {
-		_ = file.Close()
-	}()
-	if err != nil {
-		return err
+			_, err := fmt.Fprintln(w, c.line)
+			if err != nil {
+				return err
+			}
+		}
 	}
-
-	pos := int64(0)
-	scanLines := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
-		advance, token, err = bufio.ScanLines(data, atEOF)
-		pos += int64(advance)
-		return
-	}
-
-	start := int64(io.SeekStart)
-	end := fi.size
-	mid := start + (end-start)/2
-	var prevTime time.Time
-	var prevOffset int64
-	for {
-		//file.Seek(start, io.SeekStart)
-		//SeekLine(file, 0, io.SeekCurrent)
-		scanner := bufio.NewScanner(file)
-		scanner.Split(scanLines)
-		scanner.Scan()
-		line := scanner.Text()
-		fmt.Println(line)
-		t, err := r.parseLogDateTime(line)
-		if err != nil {
-			return err
-		}
-
-		nowMinusT := time.Now().UTC().Add(time.Duration(-r.cfg.LastNMinutes) * time.Minute)
-		if nowMinusT.Sub(t) <= 0 {
-			end = mid
-			mid = start + (end-start)/2
-			fmt.Println("up", mid)
-		} else {
-			start = mid
-			mid = start + (end-start)/2
-			fmt.Println("down", mid)
-		}
-
-		_, err = file.Seek(mid, io.SeekStart)
-		if err != nil {
-			return err
-		}
-		offSet, err := SeekLine(file, 0, io.SeekCurrent)
-		if err != nil {
-			return err
-		}
-
-		prevOffset = offSet
-		if t.Sub(prevTime) >= 0 {
-			break
-		}
-
-		if start == mid || end == mid {
-			break
-		}
-
-		prevTime = t
-	}
-
-	_, err = file.Seek(prevOffset, io.SeekStart)
-	if err != nil {
-		return err
-	}
-	scanner := bufio.NewScanner(file)
-	scanner.Split(scanLines)
-	scanner.Scan()
-	fmt.Println(scanner.Text())
-
-	return nil
-}
-
-func (r *LogReader) streamOne(fi fileInfo) error {
-	filePath := path.Join(r.cfg.Directory, fi.name)
-	file, err := os.Open(filePath)
-	defer func() {
-		_ = file.Close()
-	}()
-	if err != nil {
-		return err
-	}
-
-	//offset, err := file.Seek(0, io.SeekStart)
-	//if err != nil {
-	//	return err
-	//}
-	var offset int64
-	buffSize := int64(100)
-	buff := &bytes.Buffer{}
-	for {
-		bs := make([]byte, buffSize)
-		_, err = file.ReadAt(bs, offset)
-		if errors.Is(err, io.EOF) {
-			buff.Write(bs)
-			line, _ := buff.ReadString('\n')
-			fmt.Printf(line)
-			break
-		}
-		if err != nil {
-			return err
-		}
-
-		offset += buffSize
-		buff.Write(bs)
-
-		l, _ := buff.ReadString('\n')
-		t, err := r.parseLogDateTime(l)
-		if err != nil {
-			return err
-		}
-		fmt.Println(t)
-	}
-
-	//fmt.Print(buff.String())
 
 	return nil
 }
