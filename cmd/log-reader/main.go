@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
+	"log"
 	"os"
 	"os/signal"
 	"syscall"
@@ -24,10 +24,17 @@ func main() {
 		Directory:    *directoryFlag,
 		LastNMinutes: *minutesFlag,
 	}
-	logReader := logging.NewLogReader(cfg)
+	logReader, err := logging.NewLogReader(cfg)
+	if err != nil {
+		log.Fatalf("could not create log reader: %v", err)
+	}
 
 	go func() {
-		fmt.Println(logReader.Read(ctx).String())
+		err := logReader.Write(ctx, os.Stdout)
+		if err != nil {
+			log.Fatalf("could not read logs: %v", err)
+		}
+
 		quit <- os.Interrupt
 	}()
 
