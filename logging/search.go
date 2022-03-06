@@ -76,13 +76,12 @@ func search(f *os.File, search int64) (int64, error) {
 	return -1, nil
 }
 
+func newLineFile(file *os.File) *lineFile {
+	return &lineFile{file}
+}
 
 type lineFile struct {
 	*os.File
-}
-
-func newLineFile(file *os.File) *lineFile {
-	return &lineFile{file}
 }
 
 func (file *lineFile) seekLine(lines int64, whence int) (int64, error) {

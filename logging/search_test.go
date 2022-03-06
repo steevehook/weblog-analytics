@@ -56,39 +56,39 @@ func (s *searchSuite) Test_seekLine() {
 		expectedOffset int64
 	}{
 		{
-			name: "Line Zero",
-			lines: 0,
-			whence: io.SeekCurrent,
+			name:           "Line Zero",
+			lines:          0,
+			whence:         io.SeekCurrent,
 			expectedOffset: 5,
 		},
 		{
-			name: "LinesGreaterThanZero SeekCurrent",
-			lines: 3,
-			whence: io.SeekCurrent,
+			name:           "LinesGreaterThanZero SeekCurrent",
+			lines:          3,
+			whence:         io.SeekCurrent,
 			expectedOffset: int64(len(data)),
 		},
 		{
-			name: "LinesGreaterThanZero SeekEnd",
-			lines: 3,
-			whence: io.SeekEnd,
+			name:           "LinesGreaterThanZero SeekEnd",
+			lines:          3,
+			whence:         io.SeekEnd,
 			expectedOffset: int64(len(data)),
 		},
 		{
-			name: "LinesGreaterThanZero SeekStart LastLine",
-			lines: 3,
-			whence: io.SeekStart,
+			name:           "LinesGreaterThanZero SeekStart LastLine",
+			lines:          3,
+			whence:         io.SeekStart,
 			expectedOffset: int64(len(data)),
 		},
 		{
-			name: "LineGreaterThanZero SeekStart SecondLine",
-			lines: 2,
-			whence: io.SeekStart,
+			name:           "LineGreaterThanZero SeekStart SecondLine",
+			lines:          2,
+			whence:         io.SeekStart,
 			expectedOffset: 10,
 		},
 		{
-			name: "NegativeLines SeekStart SecondLine",
-			lines: -2,
-			whence: io.SeekStart,
+			name:           "NegativeLines SeekStart SecondLine",
+			lines:          -2,
+			whence:         io.SeekStart,
 			expectedOffset: 10,
 		},
 	}
@@ -104,4 +104,8 @@ func (s *searchSuite) Test_seekLine() {
 
 func TestSearch(t *testing.T) {
 	suite.Run(t, new(searchSuite))
+}
+
+func BenchmarkSearch(b *testing.B) {
+	b.ReportAllocs()
 }

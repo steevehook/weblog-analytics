@@ -2,34 +2,69 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math"
 	"os"
 	"path"
-	"strconv"
+	"regexp"
+	"time"
 )
 
 func main() {
-	filePath := path.Join("testdata", "numbers.txt")
-	file, err := os.Open(filePath)
+	filePath := path.Join("testdata", "logs.txt")
+	f, err := os.Open(filePath)
 	defer func() {
-		_ = file.Close()
+		_ = f.Close()
 	}()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	offset, err := binarySearch(file, 14)
+	file := newLogFile(f)
+	offset, err := file.search(2)
 	if err != nil {
 		log.Fatal(err)
 	}
-	fmt.Println(offset)
+
+	if offset == -1 {
+		return
+	}
+	_, err = file.Seek(offset, io.SeekStart)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		fmt.Println(scanner.Text())
+	}
 }
 
-func binarySearch(f *os.File, search int64) (int64, error) {
-	var top, bottom, pos, prevPos int64
+const dateTimeGroupName = "datetime"
+
+var errInvalidLogFormat = errors.New("invalid log format")
+
+func newLogFile(file *os.File) *logFile {
+	logFormat := fmt.Sprintf(
+		`^(\S+) (\S+) (\S+) \[(?P<%s>[\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\S+)?" (\d{3}|-) (\d+|-)\s?"?([^"]*)"?\s?"?([^"]*)?"?$`,
+		dateTimeGroupName,
+	)
+	return &logFile{
+		File:  file,
+		regEx: regexp.MustCompile(logFormat),
+	}
+}
+
+type logFile struct {
+	*os.File
+	regEx *regexp.Regexp
+}
+
+func (file *logFile) search(lastNMinutes uint) (int64, error) {
+	var top, bottom, pos, prevPos, offset, prevOffset int64
 	scanLines := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		advance, token, err = bufio.ScanLines(data, atEOF)
 		prevPos = pos
@@ -37,23 +72,25 @@ func binarySearch(f *os.File, search int64) (int64, error) {
 		return
 	}
 
-	file := newLineFile(f)
 	stat, err := os.Stat(file.Name())
 	if err != nil {
 		return -1, err
 	}
 	bottom = stat.Size()
-
+	nowMinusT := time.Now().UTC().Add(-time.Duration(lastNMinutes) * time.Minute)
+	var prevLogTime time.Time
 	for top <= bottom {
 		// define the middle relative to top and bottom positions
 		middle := top + (bottom-top)/2
+		//fmt.Println("new top", top, "new bottom", bottom)
+		//fmt.Println("middle", middle)
 		// seek the file at the middle
 		_, err := file.Seek(middle, io.SeekStart)
 		if err != nil {
 			return -1, err
 		}
 		// reposition the middle to the beginning of the line
-		offset, err := file.seekLine(0, io.SeekCurrent)
+		offset, err = file.seekLine(0, io.SeekCurrent)
 		if err != nil {
 			return -1, err
 		}
@@ -64,47 +101,45 @@ func binarySearch(f *os.File, search int64) (int64, error) {
 		scanner.Scan()
 		line := scanner.Text()
 		if line == "" {
-			// we'll consider this an EOF
-			// so let's break
+			// we'll consider an empty line an EOF
 			break
 		}
 
-		num, err := strconv.Atoi(line)
+		logTime, err := file.parseLogDateTime(line)
 		if err != nil {
-			// we only want to look up sorted numbers
-			// if there's anything that's not valid just error
-			return -1, fmt.Errorf("invalid line at offset %d : %w", offset, err)
+			return -1, err
 		}
 
-		// found the number, return the offset
-		if int64(num) == search {
-			return offset, nil
-		}
-		if int64(num) > search {
-			// the number is way up (relative to the middle)
-			// move up the bottom
-			bottom = offset - (pos - prevPos)
-		} else {
-			// the number is way down (relative to the middle)
+		if nowMinusT.Sub(logTime) > 0 {
+			// the starting log is way down (relative to the middle)
 			// move down the top
 			top = offset + (pos - prevPos)
+		} else if prevLogTime.Sub(logTime) < 0 {
+			// the starting log is way up (relative to the middle)
+			// move up the bottom
+			bottom = offset - (pos - prevPos)
+		} else if nowMinusT.Sub(prevLogTime) < 0 && offset != top {
+			return top, nil
 		}
+
+		if offset == top {
+			return offset - (pos - prevPos), nil
+		}
+		if offset == bottom {
+			return bottom, nil
+		}
+		prevLogTime = logTime
+		prevOffset = offset
 	}
 
-	// the number was not found
+	if nowMinusT.Minute() == prevLogTime.Minute() {
+		return prevOffset, nil
+	}
+
 	return -1, nil
 }
 
-
-type lineFile struct {
-	*os.File
-}
-
-func newLineFile(file *os.File) *lineFile {
-	return &lineFile{file}
-}
-
-func (file *lineFile) seekLine(lines int64, whence int) (int64, error) {
+func (file *logFile) seekLine(lines int64, whence int) (int64, error) {
 	const bufferSize = 32 * 1024 // 32KB
 	buf := make([]byte, bufferSize)
 	bufLen := 0
@@ -169,4 +204,32 @@ func (file *lineFile) seekLine(lines int64, whence int) (int64, error) {
 	}
 
 	return pos, err
+}
+
+// apache common log example
+// 127.0.0.1 user-identifier frank [06/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+func (file *logFile) parseLogDateTime(l string) (time.Time, error) {
+	matches := file.regEx.FindStringSubmatch(l)
+	if len(matches) == 0 {
+		return time.Time{}, errInvalidLogFormat
+	}
+
+	var dateTime string
+	for i, name := range file.regEx.SubexpNames() {
+		if name == dateTimeGroupName {
+			dateTime = matches[i]
+			break
+		}
+	}
+	if dateTime == "" {
+		return time.Time{}, errInvalidLogFormat
+	}
+
+	dateTimeFormat := "02/Jan/2006:15:04:05 -0700"
+	t, err := time.Parse(dateTimeFormat, dateTime)
+	if err != nil {
+		return time.Time{}, err
+	}
+
+	return t, nil
 }
