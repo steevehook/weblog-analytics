@@ -8,35 +8,32 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type searchSuite struct {
+type fileSuite struct {
 	suite.Suite
 	dataDir string
 }
 
-func (s *searchSuite) SetupSuite() {
+func (s *fileSuite) SetupSuite() {
 	s.dataDir = "testdata"
 	s.Require().NoError(os.RemoveAll(s.dataDir))
 	s.Require().NoError(os.Mkdir(s.dataDir, 0777))
 }
 
-func (s *searchSuite) TearDownSuite() {
+func (s *fileSuite) TearDownSuite() {
 	s.Require().NoError(os.RemoveAll(s.dataDir))
 }
 
-func (s *searchSuite) SetupTest() {
-}
-
-func (s *searchSuite) Test_newLineFile() {
+func (s *fileSuite) Test_NewFile() {
 	f, err := os.CreateTemp(s.dataDir, "*")
 	defer func() { s.Require().NoError(f.Close()) }()
 	s.Require().NoError(err)
 
-	file := newLineFile(f)
+	file := NewFile(f)
 
 	s.NotNil(file)
 }
 
-func (s *searchSuite) Test_seekLine() {
+func (s *fileSuite) Test_LogFile_seekLine() {
 	data := "some\ntest\nstring\n"
 	f, err := os.CreateTemp(s.dataDir, "*")
 	defer func() { s.Require().NoError(f.Close()) }()
@@ -46,7 +43,7 @@ func (s *searchSuite) Test_seekLine() {
 
 	_, err = f.Seek(8, io.SeekStart)
 	s.NoError(err)
-	file := newLineFile(f)
+	file := NewFile(f)
 	s.NotNil(file)
 
 	tests := []struct {
@@ -102,8 +99,8 @@ func (s *searchSuite) Test_seekLine() {
 	}
 }
 
-func TestSearch(t *testing.T) {
-	suite.Run(t, new(searchSuite))
+func TestLogFile(t *testing.T) {
+	suite.Run(t, new(fileSuite))
 }
 
 func BenchmarkSearch(b *testing.B) {

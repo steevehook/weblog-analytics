@@ -1,69 +1,45 @@
-package main
+package logging
 
 import (
 	"bufio"
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"math"
 	"os"
-	"path"
 	"regexp"
 	"time"
 )
-
-func main() {
-	filePath := path.Join("testdata", "logs.txt")
-	f, err := os.Open(filePath)
-	defer func() {
-		_ = f.Close()
-	}()
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	file := newLogFile(f)
-	offset, err := file.search(2)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	if offset == -1 {
-		return
-	}
-	_, err = file.Seek(offset, io.SeekStart)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	scanner := bufio.NewScanner(f)
-	for scanner.Scan() {
-		fmt.Println(scanner.Text())
-	}
-}
 
 const dateTimeGroupName = "datetime"
 
 var errInvalidLogFormat = errors.New("invalid log format")
 
-func newLogFile(file *os.File) *logFile {
+// NewFile wraps an os.File creating a special apache common log format regex
+// and adding useful helper functions such as seekLine and search for easier working with log files
+func NewFile(file *os.File) *File {
 	logFormat := fmt.Sprintf(
 		`^(\S+) (\S+) (\S+) \[(?P<%s>[\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\S+)?" (\d{3}|-) (\d+|-)\s?"?([^"]*)"?\s?"?([^"]*)?"?$`,
 		dateTimeGroupName,
 	)
-	return &logFile{
+	return &File{
 		File:  file,
 		regEx: regexp.MustCompile(logFormat),
 	}
 }
 
-type logFile struct {
+// File represents a wrapped structure around os.File
+// providing additional constructs and helpers for working with log files
+type File struct {
 	*os.File
 	regEx *regexp.Regexp
 }
 
-func (file *logFile) search(lastNMinutes uint) (int64, error) {
+// Search applies binary search on a log file looking for
+// the offset of the log that is withing lastNMinutes.
+// offset >= 0 -> means an actual log line to begin reading logs at was found
+// offset == -1 -> all the logs inside the log file are older than lastNMinutes
+func (file *File) Search(lastNMinutes uint) (int64, error) {
 	var top, bottom, pos, prevPos, offset, prevOffset int64
 	scanLines := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		advance, token, err = bufio.ScanLines(data, atEOF)
@@ -137,7 +113,10 @@ func (file *logFile) search(lastNMinutes uint) (int64, error) {
 	return -1, nil
 }
 
-func (file *logFile) seekLine(lines int64, whence int) (int64, error) {
+// seekLine resets the cursor for N lines relative to whence, back to the beginning (seek back)
+// lines: 0 ->  means seek back (till new line) for the current line
+// lines > 0 -> means seek back that many lines
+func (file *File) seekLine(lines int64, whence int) (int64, error) {
 	const bufferSize = 32 * 1024 // 32KB
 	buf := make([]byte, bufferSize)
 	bufLen := 0
@@ -204,9 +183,10 @@ func (file *logFile) seekLine(lines int64, whence int) (int64, error) {
 	return pos, err
 }
 
-// apache common log example
+// parseLogTime parses a given apache common log line and attempts to convert it into time.Time
+// example of apache common log line:
 // 127.0.0.1 user-identifier frank [06/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-func (file *logFile) parseLogTime(l string) (time.Time, error) {
+func (file *File) parseLogTime(l string) (time.Time, error) {
 	matches := file.regEx.FindStringSubmatch(l)
 	if len(matches) == 0 {
 		return time.Time{}, errInvalidLogFormat

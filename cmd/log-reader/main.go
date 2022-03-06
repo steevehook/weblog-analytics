@@ -20,11 +20,11 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cfg := logging.LogReaderConfig{
+	cfg := logging.ReaderConfig{
 		Directory:    *directoryFlag,
 		LastNMinutes: *minutesFlag,
 	}
-	logReader, err := logging.NewLogReader(cfg)
+	logReader, err := logging.NewReader(cfg)
 	if err != nil {
 		log.Fatalf("could not create log reader: %v", err)
 	}

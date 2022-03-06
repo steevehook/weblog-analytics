@@ -3,27 +3,12 @@ package logging
 import (
 	"bufio"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
 	"os"
 	"path"
-	"regexp"
 	"time"
-)
-
-const (
-	dateTimeGroupName = "datetime"
-	dateTimeFormat    = "02/Jan/2006:15:04:05 -0700"
-)
-
-var (
-	logFormat = fmt.Sprintf(
-		`^(\S+) (\S+) (\S+) \[(?P<%s>[\w:/]+\s[+\-]\d{4})\] "(\S+)\s?(\S+)?\s?(\S+)?" (\d{3}|-) (\d+|-)\s?"?([^"]*)"?\s?"?([^"]*)?"?$`,
-		dateTimeGroupName,
-	)
-	errInvalidLogFormat = errors.New("invalid log format")
 )
 
 type fileInfo struct {
@@ -32,14 +17,14 @@ type fileInfo struct {
 	size    int64
 }
 
-// LogReaderConfig represents the configuration to start the log reader
-type LogReaderConfig struct {
+// ReaderConfig represents the configuration to start the log reader
+type ReaderConfig struct {
 	Directory    string
 	LastNMinutes int
 }
 
-// NewLogReader creates a new instance of log reader
-func NewLogReader(cfg LogReaderConfig) (*LogReader, error) {
+// NewReader creates a new instance of log reader
+func NewReader(cfg ReaderConfig) (*Reader, error) {
 	files, err := ioutil.ReadDir(cfg.Directory)
 	if err != nil {
 		return nil, err
@@ -59,26 +44,24 @@ func NewLogReader(cfg LogReaderConfig) (*LogReader, error) {
 		filesInfo = append(filesInfo, fi)
 	}
 
-	lr := &LogReader{
+	lr := &Reader{
 		cfg:       cfg,
-		regEx:     regexp.MustCompile(logFormat),
 		filesInfo: filesInfo,
 	}
 	return lr, nil
 }
 
-// LogReader represents the application log reader type
+// Reader represents the application log reader type
 // responsible for reading logs from a given directory
 // that were written in the last N minutes
-type LogReader struct {
-	cfg       LogReaderConfig
+type Reader struct {
+	cfg       ReaderConfig
 	filesInfo []fileInfo
-	regEx     *regexp.Regexp
 }
 
 // Read reads the log files using the given LogReader configuration
 // and stores it inside a local bytes buffer to be displayed later
-func (r *LogReader) Write(ctx context.Context, w io.Writer) error {
+func (r *Reader) Write(ctx context.Context, w io.Writer) error {
 	select {
 	case <-ctx.Done():
 		return nil
@@ -90,7 +73,7 @@ func (r *LogReader) Write(ctx context.Context, w io.Writer) error {
 // if there are an infinite number of log files,
 // knowing the exact log rotation period may help
 // skip iterations up to the very close of the log file
-func (r *LogReader) write(w io.Writer) error {
+func (r *Reader) write(w io.Writer) error {
 	// if the r.cfg.LastNMinutes < log rotation period
 	// start reading from the last file
 	// APPLY BINARY SEARCH HERE TOO
@@ -140,7 +123,7 @@ type chunk struct {
 	err  error
 }
 
-func (r *LogReader) stream(fi fileInfo) chan chunk {
+func (r *Reader) stream(fi fileInfo) chan chunk {
 	out := make(chan chunk)
 	go func() {
 		filePath := path.Join(r.cfg.Directory, fi.name)
@@ -167,29 +150,4 @@ func (r *LogReader) stream(fi fileInfo) chan chunk {
 		close(out)
 	}()
 	return out
-}
-
-func (r *LogReader) parseLogDateTime(l string) (time.Time, error) {
-	matches := r.regEx.FindStringSubmatch(l)
-	if len(matches) == 0 {
-		return time.Time{}, errInvalidLogFormat
-	}
-
-	var dateTime string
-	for i, name := range r.regEx.SubexpNames() {
-		if name == dateTimeGroupName {
-			dateTime = matches[i]
-			break
-		}
-	}
-	if dateTime == "" {
-		return time.Time{}, errInvalidLogFormat
-	}
-
-	t, err := time.Parse(dateTimeFormat, dateTime)
-	if err != nil {
-		return time.Time{}, err
-	}
-
-	return t, nil
 }
