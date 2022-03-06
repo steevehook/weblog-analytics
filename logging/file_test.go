@@ -4,6 +4,7 @@ import (
 	"io"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 )
@@ -53,7 +54,7 @@ func (s *fileSuite) Test_LogFile_seekLine() {
 		expectedOffset int64
 	}{
 		{
-			name:           "Line Zero",
+			name:           "Line Zero CurrentLine",
 			lines:          0,
 			whence:         io.SeekCurrent,
 			expectedOffset: 5,
@@ -95,6 +96,53 @@ func (s *fileSuite) Test_LogFile_seekLine() {
 
 			s.NoError(err)
 			s.Equal(test.expectedOffset, offset)
+		})
+	}
+}
+
+func (s *fileSuite) Test_LogFile_parseLogTime_Success() {
+	log := `127.0.0.1 user-identifier frank [06/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`
+	expectedTime, err := time.Parse(dateTimeFormat, "06/Mar/2022:05:30:00 +0000")
+	s.Require().NoError(err)
+	file := NewFile(nil)
+	s.NotNil(file)
+
+	t, err := file.parseLogTime(log)
+
+	s.NoError(err)
+	s.True(t.Equal(expectedTime))
+}
+
+func (s *fileSuite) Test_LogFile_parseLogTime_Error() {
+	file := NewFile(nil)
+	s.NotNil(file)
+	tests := []struct{
+		name string
+		log string
+		expectedErr string
+	}{
+		{
+			name: "Empty LogLine",
+			log: "",
+			expectedErr: "invalid log format",
+		},
+		{
+			name: "Invalid LogLine",
+			log: "this log line is not valid",
+			expectedErr: "invalid log format",
+		},
+		{
+			name: "Invalid DateFormat",
+			log: `127.0.0.1 user-identifier frank [36/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+			expectedErr: `parsing time "36/Mar/2022:05:30:00 +0000": day out of range`,
+		},
+	}
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			t, err := file.parseLogTime(test.log)
+
+			s.EqualError(err, test.expectedErr)
+			s.True(t.IsZero())
 		})
 	}
 }

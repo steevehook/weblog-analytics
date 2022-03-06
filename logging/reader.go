@@ -66,6 +66,7 @@ func (r *Reader) Write(ctx context.Context, w io.Writer) error {
 	case <-ctx.Done():
 		return nil
 	default:
+		// MAKE THE API CLEANER, also RENAME TO READ, that's why it's called a reader
 		return r.write(w)
 	}
 }

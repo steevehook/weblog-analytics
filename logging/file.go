@@ -11,7 +11,10 @@ import (
 	"time"
 )
 
-const dateTimeGroupName = "datetime"
+const (
+	dateTimeGroupName = "datetime"
+	dateTimeFormat = "02/Jan/2006:15:04:05 -0700"
+)
 
 var errInvalidLogFormat = errors.New("invalid log format")
 
@@ -203,7 +206,6 @@ func (file *File) parseLogTime(l string) (time.Time, error) {
 		return time.Time{}, errInvalidLogFormat
 	}
 
-	dateTimeFormat := "02/Jan/2006:15:04:05 -0700"
 	t, err := time.Parse(dateTimeFormat, dateTime)
 	if err != nil {
 		return time.Time{}, err
