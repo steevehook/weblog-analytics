@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -77,7 +78,7 @@ func (file *File) Search(lastNMinutes uint) (int64, error) {
 		scanner.Split(scanLines)
 		scanner.Scan()
 		line := scanner.Text()
-		if line == "" {
+		if strings.TrimSpace(line) == "" {
 			// we'll consider empty line an EOF
 			break
 		}
@@ -188,7 +189,7 @@ func (file *File) seekLine(lines int64, whence int) (int64, error) {
 
 // parseLogTime parses a given apache common log line and attempts to convert it into time.Time
 // example of apache common log line:
-// 127.0.0.1 user-identifier frank [06/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+// 127.0.0.1 user-identifier frank [04/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
 func (file *File) parseLogTime(l string) (time.Time, error) {
 	matches := file.regEx.FindStringSubmatch(l)
 	if len(matches) == 0 {

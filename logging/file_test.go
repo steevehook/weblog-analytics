@@ -1,6 +1,7 @@
 package logging
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"testing"
@@ -32,6 +33,79 @@ func (s *fileSuite) Test_NewFile() {
 	file := NewFile(f)
 
 	s.NotNil(file)
+}
+
+func (s *fileSuite) Test_LogFile_Search_Success() {
+	// add some old logs as well
+	now := time.Now().UTC()
+	// add some old logs
+	logs := "127.0.0.1 user-identifier frank [02/Mar/2022:05:30:00 +0000] \"GET /api/endpoint HTTP/1.0\" 500 123\n"
+	logs += "127.0.0.1 user-identifier frank [02/Mar/2022:05:35:00 +0000] \"GET /api/endpoint HTTP/1.0\" 500 123\n"
+	// add some new logs
+	numberOfNewLogs := 7
+	for i := 0; i < numberOfNewLogs; i++ {
+		logs += fmt.Sprintf(
+			"127.0.0.1 user-identifier frank [%v] \"GET /api/endpoint HTTP/1.0\" 500 123\n",
+			now.Add(-time.Duration(numberOfNewLogs-i)*time.Minute).Format(dateTimeFormat),
+		)
+	}
+	f, err := os.CreateTemp(s.dataDir, "*-http.log")
+	defer func() { s.Require().NoError(f.Close()) }()
+	s.Require().NoError(err)
+	_, err = f.WriteString(logs)
+	s.Require().NoError(err)
+	file := NewFile(f)
+	s.NotNil(file)
+
+	lineLen := int64(97)
+	for i := 0; i < numberOfNewLogs; i++ {
+		offset, err := file.Search(uint(numberOfNewLogs - i))
+		expectedOffset := lineLen*int64(i)+int64(i)
+		oldOffset := lineLen*2+2
+
+		s.NoError(err)
+		s.Equal(expectedOffset, offset-oldOffset)
+	}
+}
+
+func (s *fileSuite) Test_LogFile_Search_NoLogs() {
+	now := time.Now().UTC()
+	numberOfLogs := 7
+	logs := ""
+	for i := 0; i < numberOfLogs; i++ {
+		logs += fmt.Sprintf(
+			"127.0.0.1 user-identifier frank [%v] \"GET /api/endpoint HTTP/1.0\" 500 123\n",
+			now.Add(-time.Duration(numberOfLogs-i)*time.Hour).Format(dateTimeFormat),
+		)
+	}
+	f, err := os.CreateTemp(s.dataDir, "*-http.log")
+	defer func() { s.Require().NoError(f.Close()) }()
+	s.Require().NoError(err)
+	_, err = f.WriteString(logs)
+	s.Require().NoError(err)
+	file := NewFile(f)
+	s.NotNil(file)
+
+	offset, err := file.Search(1)
+
+	s.NoError(err)
+	s.Equal(int64(-1), offset)
+}
+
+func (s *fileSuite) Test_LogFile_Search_Error() {
+	logs := "some invalid log line\n"
+	f, err := os.CreateTemp(s.dataDir, "*-http.log")
+	defer func() { s.Require().NoError(f.Close()) }()
+	s.Require().NoError(err)
+	_, err = f.WriteString(logs)
+	s.Require().NoError(err)
+	file := NewFile(f)
+	s.NotNil(file)
+
+	offset, err := file.Search(1)
+
+	s.EqualError(err, "invalid log format")
+	s.Equal(int64(-1), offset)
 }
 
 func (s *fileSuite) Test_LogFile_seekLine() {
@@ -101,8 +175,8 @@ func (s *fileSuite) Test_LogFile_seekLine() {
 }
 
 func (s *fileSuite) Test_LogFile_parseLogTime_Success() {
-	log := `127.0.0.1 user-identifier frank [06/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`
-	expectedTime, err := time.Parse(dateTimeFormat, "06/Mar/2022:05:30:00 +0000")
+	log := `127.0.0.1 user-identifier frank [04/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`
+	expectedTime, err := time.Parse(dateTimeFormat, "04/Mar/2022:05:30:00 +0000")
 	s.Require().NoError(err)
 	file := NewFile(nil)
 	s.NotNil(file)
@@ -116,24 +190,24 @@ func (s *fileSuite) Test_LogFile_parseLogTime_Success() {
 func (s *fileSuite) Test_LogFile_parseLogTime_Error() {
 	file := NewFile(nil)
 	s.NotNil(file)
-	tests := []struct{
-		name string
-		log string
+	tests := []struct {
+		name        string
+		log         string
 		expectedErr string
 	}{
 		{
-			name: "Empty LogLine",
-			log: "",
+			name:        "Empty LogLine",
+			log:         "",
 			expectedErr: "invalid log format",
 		},
 		{
-			name: "Invalid LogLine",
-			log: "this log line is not valid",
+			name:        "Invalid LogLine",
+			log:         "this log line is not valid",
 			expectedErr: "invalid log format",
 		},
 		{
-			name: "Invalid DateFormat",
-			log: `127.0.0.1 user-identifier frank [36/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+			name:        "Invalid DateFormat",
+			log:         `127.0.0.1 user-identifier frank [36/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
 			expectedErr: `parsing time "36/Mar/2022:05:30:00 +0000": day out of range`,
 		},
 	}
