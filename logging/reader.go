@@ -93,6 +93,7 @@ func (r *LogReader) Write(ctx context.Context, w io.Writer) error {
 func (r *LogReader) write(w io.Writer) error {
 	// if the r.cfg.LastNMinutes < log rotation period
 	// start reading from the last file
+	// APPLY BINARY SEARCH HERE TOO
 	readFrom := -1
 	for i, fi := range r.filesInfo {
 		// if current time in UTC minus LastNMinutes => we may have multiple log files to read

@@ -80,32 +80,30 @@ func (file *logFile) search(lastNMinutes uint) (int64, error) {
 	nowMinusT := time.Now().UTC().Add(-time.Duration(lastNMinutes) * time.Minute)
 	var prevLogTime time.Time
 	for top <= bottom {
-		// define the middle relative to top and bottom positions
+		// define the middle relative to the top and bottom positions
 		middle := top + (bottom-top)/2
-		//fmt.Println("new top", top, "new bottom", bottom)
-		//fmt.Println("middle", middle)
 		// seek the file at the middle
 		_, err := file.Seek(middle, io.SeekStart)
 		if err != nil {
 			return -1, err
 		}
-		// reposition the middle to the beginning of the line
+		// reposition the middle to the beginning of the current line
 		offset, err = file.seekLine(0, io.SeekCurrent)
 		if err != nil {
 			return -1, err
 		}
 
-		// scan 1 line and convert it to int
+		// scan 1 line and parse 1 log line
 		scanner := bufio.NewScanner(file)
 		scanner.Split(scanLines)
 		scanner.Scan()
 		line := scanner.Text()
 		if line == "" {
-			// we'll consider an empty line an EOF
+			// we'll consider empty line an EOF
 			break
 		}
 
-		logTime, err := file.parseLogDateTime(line)
+		logTime, err := file.parseLogTime(line)
 		if err != nil {
 			return -1, err
 		}
@@ -208,7 +206,7 @@ func (file *logFile) seekLine(lines int64, whence int) (int64, error) {
 
 // apache common log example
 // 127.0.0.1 user-identifier frank [06/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-func (file *logFile) parseLogDateTime(l string) (time.Time, error) {
+func (file *logFile) parseLogTime(l string) (time.Time, error) {
 	matches := file.regEx.FindStringSubmatch(l)
 	if len(matches) == 0 {
 		return time.Time{}, errInvalidLogFormat
