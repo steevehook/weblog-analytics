@@ -4,29 +4,31 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
 )
 
+const dataDir = "testdata"
+
 type fileSuite struct {
 	suite.Suite
-	dataDir string
 }
 
 func (s *fileSuite) SetupSuite() {
-	s.dataDir = "testdata"
-	s.Require().NoError(os.RemoveAll(s.dataDir))
-	s.Require().NoError(os.Mkdir(s.dataDir, 0777))
+	s.Require().NoError(os.RemoveAll(dataDir))
+	s.Require().NoError(os.Mkdir(dataDir, 0777))
 }
 
 func (s *fileSuite) TearDownSuite() {
-	s.Require().NoError(os.RemoveAll(s.dataDir))
+	s.Require().NoError(os.RemoveAll(dataDir))
 }
 
 func (s *fileSuite) Test_NewFile() {
-	f, err := os.CreateTemp(s.dataDir, "*")
+	f, err := os.CreateTemp(dataDir, "*")
 	defer func() { s.Require().NoError(f.Close()) }()
 	s.Require().NoError(err)
 
@@ -35,7 +37,7 @@ func (s *fileSuite) Test_NewFile() {
 	s.NotNil(file)
 }
 
-func (s *fileSuite) Test_LogFile_Search_Success() {
+func (s *fileSuite) Test_LogFile_IndexTime_Success() {
 	// add some old logs as well
 	now := time.Now().UTC()
 	// add some old logs
@@ -49,7 +51,7 @@ func (s *fileSuite) Test_LogFile_Search_Success() {
 			now.Add(-time.Duration(numberOfNewLogs-i)*time.Minute).Format(dateTimeFormat),
 		)
 	}
-	f, err := os.CreateTemp(s.dataDir, "*-http.log")
+	f, err := os.CreateTemp(dataDir, "*-http.log")
 	defer func() { s.Require().NoError(f.Close()) }()
 	s.Require().NoError(err)
 	_, err = f.WriteString(logs)
@@ -59,16 +61,21 @@ func (s *fileSuite) Test_LogFile_Search_Success() {
 
 	lineLen := int64(97)
 	for i := 0; i < numberOfNewLogs; i++ {
-		offset, err := file.Search(uint(numberOfNewLogs - i))
-		expectedOffset := lineLen*int64(i)+int64(i)
-		oldOffset := lineLen*2+2
+		lookupTime := time.Now().UTC().Add(-time.Duration(numberOfNewLogs-i) * time.Minute)
+		offset, err := file.IndexTime(lookupTime)
+		expectedOffset := lineLen*int64(i) + int64(i)
+		oldOffset := lineLen*2 + 2
 
 		s.NoError(err)
 		s.Equal(expectedOffset, offset-oldOffset)
 	}
 }
 
-func (s *fileSuite) Test_LogFile_Search_NoLogs() {
+func (s *fileSuite) Test_LogFile_IndexTime_TinyDifference() {
+	// prove the very small difference in seconds
+}
+
+func (s *fileSuite) Test_LogFile_IndexTime_NoLogs() {
 	now := time.Now().UTC()
 	numberOfLogs := 7
 	logs := ""
@@ -78,7 +85,7 @@ func (s *fileSuite) Test_LogFile_Search_NoLogs() {
 			now.Add(-time.Duration(numberOfLogs-i)*time.Hour).Format(dateTimeFormat),
 		)
 	}
-	f, err := os.CreateTemp(s.dataDir, "*-http.log")
+	f, err := os.CreateTemp(dataDir, "*-http.log")
 	defer func() { s.Require().NoError(f.Close()) }()
 	s.Require().NoError(err)
 	_, err = f.WriteString(logs)
@@ -86,15 +93,16 @@ func (s *fileSuite) Test_LogFile_Search_NoLogs() {
 	file := NewFile(f)
 	s.NotNil(file)
 
-	offset, err := file.Search(1)
+	lookupTime := time.Now().UTC().Add(-1 * time.Minute)
+	offset, err := file.IndexTime(lookupTime)
 
 	s.NoError(err)
 	s.Equal(int64(-1), offset)
 }
 
-func (s *fileSuite) Test_LogFile_Search_Error() {
+func (s *fileSuite) Test_LogFile_IndexTime_Error() {
 	logs := "some invalid log line\n"
-	f, err := os.CreateTemp(s.dataDir, "*-http.log")
+	f, err := os.CreateTemp(dataDir, "*-http.log")
 	defer func() { s.Require().NoError(f.Close()) }()
 	s.Require().NoError(err)
 	_, err = f.WriteString(logs)
@@ -102,7 +110,8 @@ func (s *fileSuite) Test_LogFile_Search_Error() {
 	file := NewFile(f)
 	s.NotNil(file)
 
-	offset, err := file.Search(1)
+	lookupTime := time.Now().UTC().Add(-1 * time.Minute)
+	offset, err := file.IndexTime(lookupTime)
 
 	s.EqualError(err, "invalid log format")
 	s.Equal(int64(-1), offset)
@@ -110,7 +119,7 @@ func (s *fileSuite) Test_LogFile_Search_Error() {
 
 func (s *fileSuite) Test_LogFile_seekLine() {
 	data := "some\ntest\nstring\n"
-	f, err := os.CreateTemp(s.dataDir, "*")
+	f, err := os.CreateTemp(dataDir, "*")
 	defer func() { s.Require().NoError(f.Close()) }()
 	s.Require().NoError(err)
 	_, err = f.WriteString(data)
@@ -225,6 +234,21 @@ func TestLogFile(t *testing.T) {
 	suite.Run(t, new(fileSuite))
 }
 
+// generate the big log file to be able to benchmark properly
 func BenchmarkSearch(b *testing.B) {
+	f, err := os.Open(path.Join(dataDir, "http-1.log"))
+	defer func() { assert.NoError(b, f.Close()) }()
+	assert.NoError(b, err)
+	file := NewFile(f)
+	assert.NotNil(b, file)
+	b.ResetTimer()
+
+	// look up last minutes in ascending
+	// we don't care about the offset, we only want to benchmark
+	// and check for execution time and memory footprint
+	lookupTime := time.Now().UTC().Add(-27 * time.Minute)
+	_, err = file.IndexTime(lookupTime)
+
+	assert.NoError(b, err)
 	b.ReportAllocs()
 }

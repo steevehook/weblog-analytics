@@ -15,13 +15,15 @@ make build
 
 ```shell
 # run: "make build" first
-# only run once to generate the test data, it may take a while
+# only run once to generate the test data, it may take a while (~5m)
 ./bin/log-generator
 # run the log-reader with the specified cli arguments
 ./bin/log-reader -d <path/to/log/files> -t <last_n_minutes>
 # run the program directory without generating any binary
-go run cmd/log-generator/main.go
+go run cmd/log-generator/main.go -dir <path/to/dir/testdata> -interval <interval_between_logs> lines-max <max_number_of_lines_per_log_file> lines-min <min_number_of_lines_per_log_file>
 go run cmd/log-reader/main.go -d <path/to/log/files> -t <last_n_minutes>
+# generate testdata in the current directory
+./bin/log-generator
 # display all logs from testdata directory that happened in the last 5 minutes
 ./bin/log-reader -d ./testdata -t 5
 ```
@@ -31,6 +33,8 @@ go run cmd/log-reader/main.go -d <path/to/log/files> -t <last_n_minutes>
 ```shell
 # runs all the tests present in test files
 make test
+# generate testdata for the benchmark first
+go run cmd/log-generator/main.go -dir logging
 # runs all the benchmarks present in test files
 make bench
 ```

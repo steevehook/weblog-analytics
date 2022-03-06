@@ -66,6 +66,7 @@ func (r *Reader) Write(ctx context.Context, w io.Writer) error {
 	case <-ctx.Done():
 		return nil
 	default:
+		// time.Now().UTC().Add(-time.Duration(lastNMinutes) * time.Minute)
 		// MAKE THE API CLEANER, also RENAME TO READ, that's why it's called a reader
 		return r.write(w)
 	}

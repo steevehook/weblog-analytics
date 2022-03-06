@@ -1,11 +1,90 @@
 package main
 
-import "fmt"
+import (
+	"flag"
+	"fmt"
+	"log"
+	"os"
+	"path"
+	"time"
+)
 
+const (
+	dataDir        = "testdata"
+	dateTimeFormat = "02/Jan/2006:15:04:05 -0700"
+)
+
+// The process should take ~5 minutes, for an Intel i9.
+// The results may vary depending on the CPU.
 func main() {
-	// example of apache log
-	// 127.0.0.1 user-identifier frank [04/Mar/2022:00:03:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-	fmt.Println("generate couple of log files")
-	fmt.Println("create a giant 1GB log file")
-	fmt.Println("add couple of thousands inside every other file")
+	dirFlag := flag.String("dir", ".", "the directory to store all the testdata in")
+	intervalFlag := flag.Duration("interval", 10*time.Second, "interval between each log line")
+	linesMaxFlag := flag.Int("lines-max", 50_000_000, "maximum number of lines per log file")
+	linesMinFlag := flag.Int("lines-min", 100, "minimum number of lines per log file")
+	flag.Parse()
+
+	now := time.Now()
+	defer func() {
+		fmt.Println("elapsed", time.Since(now))
+	}()
+
+	err := os.MkdirAll(path.Join(*dirFlag, dataDir), 0777)
+	if err != nil && os.IsNotExist(err) {
+		log.Fatalf("could not create data directory: %v", err)
+	}
+
+	file, err := os.Create(path.Join(*dirFlag, dataDir, "http-1.log"))
+	if err != nil {
+		log.Fatalf("could not create the first file: %v", err)
+	}
+
+	log.Println("generating the giant log file")
+	ticker := time.NewTicker(10 * time.Second)
+	nowUTC := time.Now().UTC()
+	timeRange := nowUTC
+	interval := *intervalFlag
+	max := *linesMaxFlag // ~5GB
+	for i := 0; i < max; i++ {
+		select {
+		case <-ticker.C:
+			log.Println("iteration:", i, "generating logs, waiting...")
+		default:
+			timeRange = nowUTC.Add(-time.Duration(max-i) * interval)
+			logLine := fmt.Sprintf(
+				"127.0.0.1 user-identifier frank [%v] \"GET /api/endpoint HTTP/1.0\" 500 123\n",
+				timeRange.Format(dateTimeFormat),
+			)
+
+			_, err := file.WriteString(logLine)
+			if err != nil {
+				log.Fatalf("could not write log to file: %v", err)
+			}
+		}
+	}
+
+	log.Println("generating 10 other smaller log files")
+	maxFiles := 10
+	maxLogsPerFile := *linesMinFlag
+	timeRange = timeRange.Add(time.Duration(maxLogsPerFile)*interval + interval)
+	for i := 1; i < maxFiles; i++ {
+		f, err := os.Create(path.Join(*dirFlag, dataDir, fmt.Sprintf("http-%d.log", i+1)))
+		if err != nil {
+			log.Fatalf("could not create file %d: %v", i+1, err)
+		}
+
+		for j := 0; j < maxLogsPerFile; j++ {
+			logLine := fmt.Sprintf(
+				"127.0.0.1 user-identifier frank [%v] \"GET /api/endpoint HTTP/1.0\" 500 123\n",
+				timeRange.Add(-time.Duration(maxLogsPerFile-j)*interval).Format(dateTimeFormat),
+			)
+
+			_, err := f.WriteString(logLine)
+			if err != nil {
+				log.Fatalf("could not write log to file: %v", err)
+			}
+		}
+		timeRange = timeRange.Add(time.Duration(maxLogsPerFile) * interval)
+
+		_ = f.Close()
+	}
 }

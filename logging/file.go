@@ -14,7 +14,7 @@ import (
 
 const (
 	dateTimeGroupName = "datetime"
-	dateTimeFormat = "02/Jan/2006:15:04:05 -0700"
+	dateTimeFormat    = "02/Jan/2006:15:04:05 -0700"
 )
 
 var errInvalidLogFormat = errors.New("invalid log format")
@@ -39,11 +39,11 @@ type File struct {
 	regEx *regexp.Regexp
 }
 
-// Search applies binary search on a log file looking for
-// the offset of the log that is withing lastNMinutes.
+// IndexTime applies binary search on a log file looking for
+// the offset of the log that is withing lookup time.
 // offset >= 0 -> means an actual log line to begin reading logs at was found
 // offset == -1 -> all the logs inside the log file are older than lastNMinutes
-func (file *File) Search(lastNMinutes uint) (int64, error) {
+func (file *File) IndexTime(lookupTime time.Time) (int64, error) {
 	var top, bottom, pos, prevPos, offset, prevOffset int64
 	scanLines := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		advance, token, err = bufio.ScanLines(data, atEOF)
@@ -57,7 +57,6 @@ func (file *File) Search(lastNMinutes uint) (int64, error) {
 		return -1, err
 	}
 	bottom = stat.Size()
-	nowMinusT := time.Now().UTC().Add(-time.Duration(lastNMinutes) * time.Minute)
 	var prevLogTime time.Time
 	for top <= bottom {
 		// define the middle relative to the top and bottom positions
@@ -88,7 +87,7 @@ func (file *File) Search(lastNMinutes uint) (int64, error) {
 			return -1, err
 		}
 
-		if nowMinusT.Sub(logTime) > 0 {
+		if lookupTime.Sub(logTime) > 0 {
 			// the starting log is way down (relative to the middle)
 			// move down the top
 			top = offset + (pos - prevPos)
@@ -96,7 +95,7 @@ func (file *File) Search(lastNMinutes uint) (int64, error) {
 			// the starting log is way up (relative to the middle)
 			// move up the bottom
 			bottom = offset - (pos - prevPos)
-		} else if nowMinusT.Sub(prevLogTime) < 0 && offset != top {
+		} else if lookupTime.Sub(prevLogTime) < 0 && offset != top {
 			return top, nil
 		}
 
@@ -110,7 +109,7 @@ func (file *File) Search(lastNMinutes uint) (int64, error) {
 		prevOffset = offset
 	}
 
-	if nowMinusT.Minute() == prevLogTime.Minute() {
+	if lookupTime.Unix() == prevLogTime.Unix() {
 		return prevOffset, nil
 	}
 
