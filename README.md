@@ -44,3 +44,9 @@ go run cmd/log-generator/main.go -dir logging/bench
 # runs all the benchmarks present in test files
 make bench
 ```
+
+### TODOs
+
+- Better Error Handling & Logging
+- Cleaner API & smaller & more modular functions
+- More comments, especially on tricky logic functions

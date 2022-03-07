@@ -51,6 +51,9 @@ func NewReader(cfg ReaderConfig) (*Reader, error) {
 	lr := &Reader{
 		cfg:       cfg,
 		filesInfo: filesInfo,
+		nowFunc: func() time.Time {
+			return time.Now().UTC()
+		},
 	}
 	return lr, nil
 }
@@ -61,6 +64,7 @@ func NewReader(cfg ReaderConfig) (*Reader, error) {
 type Reader struct {
 	cfg       ReaderConfig
 	filesInfo []fileInfo
+	nowFunc   func() time.Time
 }
 
 // Read reads the log files using the given LogReader configuration
@@ -70,7 +74,6 @@ func (r *Reader) Read(ctx context.Context, w io.Writer) error {
 	case <-ctx.Done():
 		return nil
 	default:
-		// time.Now().UTC().Add(-time.Duration(lastNMinutes) * time.Minute)
 		return r.read(w)
 	}
 }
@@ -81,7 +84,7 @@ func (r *Reader) Read(ctx context.Context, w io.Writer) error {
 func (r *Reader) read(w io.Writer) error {
 	logFileIndex := -1
 	for i, fi := range r.filesInfo {
-		nowMinusT := time.Now().UTC().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
+		nowMinusT := r.nowFunc().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
 		if nowMinusT.Sub(fi.modTime) <= 0 {
 			logFileIndex = i
 			break
@@ -93,18 +96,17 @@ func (r *Reader) read(w io.Writer) error {
 
 	filePath := path.Join(r.cfg.Directory, r.filesInfo[logFileIndex].name)
 	f, err := os.Open(filePath)
-	defer func() {_ = f.Close()}()
+	defer func() { _ = f.Close() }()
 	if err != nil {
 		return err
 	}
 
-	nowMinusT := time.Now().UTC().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
+	nowMinusT := r.nowFunc().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
 	file := NewFile(f)
 	offset, err := file.IndexTime(nowMinusT)
 	if err != nil {
 		return err
 	}
-
 
 	others := r.filesInfo[logFileIndex+1 : len(r.filesInfo)]
 	readTheRest := func() error {
@@ -129,7 +131,7 @@ func (r *Reader) read(w io.Writer) error {
 			return nil
 		}
 
-		nowMinusT := time.Now().UTC().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
+		nowMinusT := r.nowFunc().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
 		fi := r.filesInfo[logFileIndex+1]
 		if nowMinusT.Sub(fi.modTime) > 0 {
 			return nil
@@ -144,7 +146,7 @@ func (r *Reader) read(w io.Writer) error {
 	writer := bufio.NewWriter(w)
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
-		_, err := writer.WriteString(scanner.Text()+"\n")
+		_, err := writer.WriteString(scanner.Text() + "\n")
 		if err != nil {
 			return err
 		}
@@ -162,7 +164,6 @@ type chunk struct {
 	err  error
 }
 
-// change this to simple chan string
 func (r *Reader) stream(fi fileInfo) chan chunk {
 	out := make(chan chunk)
 	go func() {

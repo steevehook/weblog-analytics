@@ -42,7 +42,7 @@ func (s *fileSuite) Test_NewFile() {
 	s.NotNil(file.regEx)
 }
 
-func (s *fileSuite) Test_LogFile_IndexTime_Success() {
+func (s *fileSuite) Test_IndexTime_Success() {
 	logs := `127.0.0.1 user-identifier frank [07/Mar/2022:02:39:32 +0000] "GET /api/endpoint HTTP/1.0" 500 123
 127.0.0.1 user-identifier frank [07/Mar/2022:02:39:42 +0000] "GET /api/endpoint HTTP/1.0" 500 123
 127.0.0.1 user-identifier frank [07/Mar/2022:02:39:52 +0000] "GET /api/endpoint HTTP/1.0" 500 123
@@ -124,7 +124,7 @@ func (s *fileSuite) Test_LogFile_IndexTime_Success() {
 	}
 }
 
-func (s *fileSuite) Test_LogFile_IndexTime_Error() {
+func (s *fileSuite) Test_IndexTime_Error() {
 	f := s.createLogs("some invalid log line\n")
 	defer func() { s.Require().NoError(f.Close()) }()
 	file := NewFile(f)
@@ -133,11 +133,11 @@ func (s *fileSuite) Test_LogFile_IndexTime_Error() {
 	lookupTime := time.Now().UTC().Add(-1 * time.Minute)
 	offset, err := file.IndexTime(lookupTime)
 
-	s.EqualError(err, "invalid log format")
+	s.EqualError(err, "line 'some invalid log line': invalid log format")
 	s.Equal(int64(-1), offset)
 }
 
-func (s *fileSuite) Test_LogFile_seekLine() {
+func (s *fileSuite) Test_seekLine() {
 	data := "some\ntest\nstring\n"
 	f := s.createLogs(data)
 	defer func() { s.Require().NoError(f.Close()) }()
@@ -200,7 +200,7 @@ func (s *fileSuite) Test_LogFile_seekLine() {
 	}
 }
 
-func (s *fileSuite) Test_LogFile_parseLogTime_Success() {
+func (s *fileSuite) Test_parseLogTime_Success() {
 	log := `127.0.0.1 user-identifier frank [04/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`
 	expectedTime, err := time.Parse(dateTimeFormat, "04/Mar/2022:05:30:00 +0000")
 	s.Require().NoError(err)
@@ -213,7 +213,7 @@ func (s *fileSuite) Test_LogFile_parseLogTime_Success() {
 	s.True(t.Equal(expectedTime))
 }
 
-func (s *fileSuite) Test_LogFile_parseLogTime_Error() {
+func (s *fileSuite) Test_parseLogTime_Error() {
 	file := NewFile(nil)
 	s.NotNil(file)
 	tests := []struct {
@@ -224,12 +224,12 @@ func (s *fileSuite) Test_LogFile_parseLogTime_Error() {
 		{
 			name:        "Empty LogLine",
 			log:         "",
-			expectedErr: "invalid log format",
+			expectedErr: "line '': invalid log format",
 		},
 		{
 			name:        "Invalid LogLine",
 			log:         "this log line is not valid",
-			expectedErr: "invalid log format",
+			expectedErr: "line 'this log line is not valid': invalid log format",
 		},
 		{
 			name:        "Invalid DateFormat",

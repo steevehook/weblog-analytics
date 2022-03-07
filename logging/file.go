@@ -103,7 +103,7 @@ func (file *File) IndexTime(lookupTime time.Time) (int64, error) {
 		}
 
 		if offset == top {
-			if lookupTime.Minute() == logTime.Minute() {
+			if lookupTime.Minute() == logTime.Minute() || top == 0 {
 				return top, nil
 			}
 			return offset - (pos - prevPos), nil
@@ -205,7 +205,7 @@ func (file *File) seekLine(lines int64, whence int) (int64, error) {
 func (file *File) parseLogTime(l string) (time.Time, error) {
 	matches := file.regEx.FindStringSubmatch(l)
 	if len(matches) == 0 {
-		return time.Time{}, errInvalidLogFormat
+		return time.Time{}, fmt.Errorf("line '%s': %w", l, errInvalidLogFormat)
 	}
 
 	var dateTime string
@@ -216,7 +216,7 @@ func (file *File) parseLogTime(l string) (time.Time, error) {
 		}
 	}
 	if dateTime == "" {
-		return time.Time{}, errInvalidLogFormat
+		return time.Time{}, fmt.Errorf("invalid date: %w", errInvalidLogFormat)
 	}
 
 	t, err := time.Parse(dateTimeFormat, dateTime)
