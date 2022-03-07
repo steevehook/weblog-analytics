@@ -39,10 +39,10 @@ type File struct {
 	regEx *regexp.Regexp
 }
 
-// IndexTime applies binary search on a log file looking for
-// the offset of the log that is withing lookup time.
+// IndexTime applies a binary search on a log file looking for
+// the offset of the log that is withing lookup time (that took place within the last T time).
 // offset >= 0 -> means an actual log line to begin reading logs at was found
-// offset == -1 -> all the logs inside the log file are older than lastNMinutes
+// offset == -1 -> all the logs inside the log file are older than the lookup time T
 func (file *File) IndexTime(lookupTime time.Time) (int64, error) {
 	var top, bottom, pos, prevPos, offset, prevOffset int64
 	scanLines := func(data []byte, atEOF bool) (advance int, token []byte, err error) {
