@@ -19,8 +19,9 @@ const (
 func main() {
 	dirFlag := flag.String("dir", ".", "the directory to store all the testdata in")
 	intervalFlag := flag.Duration("interval", 10*time.Second, "interval between each log line")
-	linesMaxFlag := flag.Int("lines-max", 50_000_000, "maximum number of lines per log file")
-	linesMinFlag := flag.Int("lines-min", 100, "minimum number of lines per log file")
+	maxFilesFlag := flag.Int("max-files", 10, "maximum number of log files")
+	maxLinesFlag := flag.Int("max-lines", 50_000_000, "maximum number of lines per log file")
+	minLinesFlag := flag.Int("min-lines", 100, "minimum number of lines per log file")
 	flag.Parse()
 
 	now := time.Now()
@@ -43,7 +44,7 @@ func main() {
 	nowUTC := time.Now().UTC()
 	timeRange := nowUTC
 	interval := *intervalFlag
-	max := *linesMaxFlag // ~5GB
+	max := *maxLinesFlag // ~5GB
 	for i := 0; i < max; i++ {
 		select {
 		case <-ticker.C:
@@ -61,10 +62,14 @@ func main() {
 			}
 		}
 	}
+	err = os.Chtimes(path.Join(*dirFlag, dataDir, "http-1.log"), timeRange, timeRange)
+	if err != nil {
+		log.Fatalf("could set modified time for file: %s: %v", file.Name(), err)
+	}
 
 	log.Println("generating 10 other smaller log files")
-	maxFiles := 10
-	maxLogsPerFile := *linesMinFlag
+	maxFiles := *maxFilesFlag
+	maxLogsPerFile := *minLinesFlag
 	timeRange = timeRange.Add(time.Duration(maxLogsPerFile)*interval + interval)
 	for i := 1; i < maxFiles; i++ {
 		f, err := os.Create(path.Join(*dirFlag, dataDir, fmt.Sprintf("http-%d.log", i+1)))
@@ -82,6 +87,11 @@ func main() {
 			if err != nil {
 				log.Fatalf("could not write log to file: %v", err)
 			}
+		}
+
+		err = os.Chtimes(path.Join(*dirFlag, dataDir, fmt.Sprintf("http-%d.log", i+1)), timeRange, timeRange)
+		if err != nil {
+			log.Fatalf("could set modified time for file: %s: %v", f.Name(), err)
 		}
 		timeRange = timeRange.Add(time.Duration(maxLogsPerFile) * interval)
 

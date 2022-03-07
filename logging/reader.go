@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"sort"
 	"time"
 )
 
@@ -43,6 +44,9 @@ func NewReader(cfg ReaderConfig) (*Reader, error) {
 		}
 		filesInfo = append(filesInfo, fi)
 	}
+	sort.Slice(filesInfo, func(i, j int) bool {
+		return filesInfo[i].modTime.Sub(filesInfo[j].modTime) < 0
+	})
 
 	lr := &Reader{
 		cfg:       cfg,
@@ -61,63 +65,96 @@ type Reader struct {
 
 // Read reads the log files using the given LogReader configuration
 // and stores it inside a local bytes buffer to be displayed later
-func (r *Reader) Write(ctx context.Context, w io.Writer) error {
+func (r *Reader) Read(ctx context.Context, w io.Writer) error {
 	select {
 	case <-ctx.Done():
 		return nil
 	default:
 		// time.Now().UTC().Add(-time.Duration(lastNMinutes) * time.Minute)
-		// MAKE THE API CLEANER, also RENAME TO READ, that's why it's called a reader
-		return r.write(w)
+		return r.read(w)
 	}
 }
 
 // if there are an infinite number of log files,
 // knowing the exact log rotation period may help
 // skip iterations up to the very close of the log file
-func (r *Reader) write(w io.Writer) error {
-	// if the r.cfg.LastNMinutes < log rotation period
-	// start reading from the last file
-	// APPLY BINARY SEARCH HERE TOO
-	readFrom := -1
+func (r *Reader) read(w io.Writer) error {
+	logFileIndex := -1
 	for i, fi := range r.filesInfo {
-		// if current time in UTC minus LastNMinutes => we may have multiple log files to read
-		nowMinusT := time.Now().UTC().Add(time.Duration(-r.cfg.LastNMinutes) * time.Minute)
+		nowMinusT := time.Now().UTC().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
 		if nowMinusT.Sub(fi.modTime) <= 0 {
-			readFrom = i
+			logFileIndex = i
 			break
 		}
 	}
-
-	if readFrom == -1 {
+	if logFileIndex == -1 {
 		return nil
 	}
 
-	// search call
+	filePath := path.Join(r.cfg.Directory, r.filesInfo[logFileIndex].name)
+	f, err := os.Open(filePath)
+	defer func() {_ = f.Close()}()
+	if err != nil {
+		return err
+	}
 
-	// read one file in reverse order and parse the log lines to check for datetime
-	// last written log in the file equals to the file ModTime()
-	//err := r.streamOne(r.filesInfo[readFrom])
-	//if err != nil {
-	//	return err
-	//}
+	nowMinusT := time.Now().UTC().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
+	file := NewFile(f)
+	offset, err := file.IndexTime(nowMinusT)
+	if err != nil {
+		return err
+	}
 
-	others := r.filesInfo[readFrom+1 : len(r.filesInfo)]
-	for _, fi := range others {
-		chunks := r.stream(fi)
-		for c := range chunks {
-			if c.err != nil {
-				return c.err
+
+	others := r.filesInfo[logFileIndex+1 : len(r.filesInfo)]
+	readTheRest := func() error {
+		for _, fi := range others {
+			chunks := r.stream(fi)
+			for c := range chunks {
+				if c.err != nil {
+					return c.err
+				}
+
+				_, err := fmt.Fprintln(w, c.line)
+				if err != nil {
+					return err
+				}
 			}
+		}
+		return nil
+	}
 
-			_, err := fmt.Fprintln(w, c.line)
-			if err != nil {
-				return err
-			}
+	if offset < 0 {
+		if logFileIndex+1 >= len(r.filesInfo) {
+			return nil
+		}
+
+		nowMinusT := time.Now().UTC().Add(-time.Duration(r.cfg.LastNMinutes) * time.Minute)
+		fi := r.filesInfo[logFileIndex+1]
+		if nowMinusT.Sub(fi.modTime) > 0 {
+			return nil
+		}
+		return readTheRest()
+	}
+
+	_, err = f.Seek(offset, io.SeekStart)
+	if err != nil {
+		return err
+	}
+	writer := bufio.NewWriter(w)
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		_, err := writer.WriteString(scanner.Text()+"\n")
+		if err != nil {
+			return err
+		}
+		err = writer.Flush()
+		if err != nil {
+			return err
 		}
 	}
 
-	return nil
+	return readTheRest()
 }
 
 type chunk struct {

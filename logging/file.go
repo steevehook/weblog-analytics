@@ -96,17 +96,26 @@ func (file *File) IndexTime(lookupTime time.Time) (int64, error) {
 			// move up the bottom
 			bottom = offset - (pos - prevPos)
 		} else if lookupTime.Sub(prevLogTime) < 0 && offset != top {
+			if lookupTime.Minute() == logTime.Minute() {
+				return offset - (pos - prevPos), nil
+			}
 			return top, nil
 		}
 
-		if lookupTime.Sub(prevLogTime) < 0 {
-			return prevOffset - (pos - prevPos), nil
-		}
 		if offset == top {
-			return top, nil
+			if lookupTime.Minute() == logTime.Minute() {
+				return top, nil
+			}
+			return offset - (pos - prevPos), nil
 		}
 		if offset == bottom {
+			if lookupTime.Minute() > logTime.Minute() {
+				return top, nil
+			}
 			return bottom, nil
+		}
+		if top == bottom && top == stat.Size() {
+			return -1, nil
 		}
 
 		prevLogTime = logTime

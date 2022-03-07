@@ -24,6 +24,9 @@ go run cmd/log-generator/main.go -dir <path/to/dir/testdata> -interval <interval
 go run cmd/log-reader/main.go -d <path/to/log/files> -t <last_n_minutes>
 # generate testdata in the current directory
 ./bin/log-generator
+# adjust maximum/minimum number of logs per file and maximum number of log files
+./bin/log-generator -lines-max 100000 -lines-min 50
+go run cmd/log-generator/main.go -max-files=5 -max-lines=5 -min-lines=5
 # display all logs from testdata directory that happened in the last 5 minutes
 ./bin/log-reader -d ./testdata -t 5
 ```

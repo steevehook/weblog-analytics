@@ -30,7 +30,7 @@ func main() {
 	}
 
 	go func() {
-		err := logReader.Write(ctx, os.Stdout)
+		err := logReader.Read(ctx, os.Stdout)
 		if err != nil {
 			log.Fatalf("could not read logs: %v", err)
 		}

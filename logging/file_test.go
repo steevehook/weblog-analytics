@@ -43,15 +43,27 @@ func (s *fileSuite) Test_NewFile() {
 }
 
 func (s *fileSuite) Test_LogFile_IndexTime_Success() {
-	logs := `127.0.0.1 user-identifier frank [02/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-127.0.0.1 user-identifier frank [02/Mar/2022:05:35:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-127.0.0.1 user-identifier frank [03/Mar/2022:10:00:10 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-127.0.0.1 user-identifier frank [03/Mar/2022:10:00:20 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-127.0.0.1 user-identifier frank [03/Mar/2022:10:01:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-127.0.0.1 user-identifier frank [03/Mar/2022:10:01:20 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-127.0.0.1 user-identifier frank [03/Mar/2022:10:02:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
-`
-	now, err := time.Parse(dateTimeFormat, "03/Mar/2022:10:05:00 +0000")
+	logs := `127.0.0.1 user-identifier frank [07/Mar/2022:02:39:32 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:39:42 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:39:52 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:40:02 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:40:12 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:40:22 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:40:32 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:40:42 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:40:52 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:41:02 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:41:12 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:41:22 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:41:32 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:41:42 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:41:52 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:42:02 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:42:12 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:42:22 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:42:32 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [07/Mar/2022:02:42:42 +0000] "GET /api/endpoint HTTP/1.0" 500 123`
+	now, err := time.Parse(dateTimeFormat, "07/Mar/2022:02:43:00 +0000")
 	s.Require().NoError(err)
 	f := s.createLogs(logs)
 	defer func() { s.Require().NoError(f.Close()) }()
@@ -64,32 +76,38 @@ func (s *fileSuite) Test_LogFile_IndexTime_Success() {
 		timeLookup     time.Time
 	}{
 		{
-			name:           "Last 3 Minutes",
-			timeLookup:     now.Add(-3 * time.Minute),
-			expectedOffset: 588,
-			expectedLog:    `127.0.0.1 user-identifier frank [03/Mar/2022:10:02:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
-		},
-		{
 			name:           "Last 4 Minutes",
 			timeLookup:     now.Add(-4 * time.Minute),
-			expectedOffset: 392,
-			expectedLog:    `127.0.0.1 user-identifier frank [03/Mar/2022:10:01:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+			expectedOffset: 0,
+			expectedLog:    `127.0.0.1 user-identifier frank [07/Mar/2022:02:39:32 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
 		},
 		{
-			name:           "Last 5 Minutes",
-			timeLookup:     now.Add(-5 * time.Minute),
-			expectedOffset: 196,
-			expectedLog:    `127.0.0.1 user-identifier frank [03/Mar/2022:10:00:10 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+			name:           "Last 3 Minutes",
+			timeLookup:     now.Add(-3 * time.Minute),
+			expectedOffset: 294,
+			expectedLog:    `127.0.0.1 user-identifier frank [07/Mar/2022:02:40:02 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+		},
+		{
+			name:           "Last 2 Minutes",
+			timeLookup:     now.Add(-2 * time.Minute),
+			expectedOffset: 882,
+			expectedLog:    `127.0.0.1 user-identifier frank [07/Mar/2022:02:41:02 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+		},
+		{
+			name:           "Last Minute",
+			timeLookup:     now.Add(-time.Minute),
+			expectedOffset: 1470,
+			expectedLog:    `127.0.0.1 user-identifier frank [07/Mar/2022:02:42:02 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
 		},
 		{
 			name:           "Last 2 Days From Beginning",
 			timeLookup:     now.Add(-2 * time.Hour * 24),
 			expectedOffset: 0,
-			expectedLog:    `127.0.0.1 user-identifier frank [02/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+			expectedLog:    `127.0.0.1 user-identifier frank [07/Mar/2022:02:39:32 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
 		},
 		{
-			name:           "Last Minute No Logs",
-			timeLookup:     now.Add(-time.Minute),
+			name:           "Future Minute No Logs",
+			timeLookup:     now.Add(time.Minute),
 			expectedOffset: -1,
 			expectedLog:    ``,
 		},
