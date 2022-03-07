@@ -1,5 +1,8 @@
 # Weblog Analytics
 
+Blazing fast log reader capable of working with giant log files (gigabytes) without too much spin.
+Give it a try 🚀
+
 ### Prerequisites
 
 - Make sure you have installed Go version >= `1.17`
