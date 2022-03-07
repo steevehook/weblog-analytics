@@ -125,6 +125,7 @@ type chunk struct {
 	err  error
 }
 
+// change this to simple chan string
 func (r *Reader) stream(fi fileInfo) chan chunk {
 	out := make(chan chunk)
 	go func() {

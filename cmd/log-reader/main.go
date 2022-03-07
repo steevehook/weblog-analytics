@@ -38,8 +38,6 @@ func main() {
 		quit <- os.Interrupt
 	}()
 
-	select {
-	case <-quit:
-		cancel()
-	}
+	<-quit
+	cancel()
 }

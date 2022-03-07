@@ -99,12 +99,16 @@ func (file *File) IndexTime(lookupTime time.Time) (int64, error) {
 			return top, nil
 		}
 
+		if lookupTime.Sub(prevLogTime) < 0 {
+			return prevOffset - (pos - prevPos), nil
+		}
 		if offset == top {
-			return offset - (pos - prevPos), nil
+			return top, nil
 		}
 		if offset == bottom {
 			return bottom, nil
 		}
+
 		prevLogTime = logTime
 		prevOffset = offset
 	}

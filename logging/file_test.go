@@ -1,112 +1,114 @@
 package logging
 
 import (
-	"fmt"
+	"bufio"
 	"io"
 	"os"
 	"path"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
 
-const dataDir = "testdata"
+const (
+	testDataDir  = "test/testdata"
+	benchDataDir = "bench/testdata"
+)
 
 type fileSuite struct {
 	suite.Suite
 }
 
 func (s *fileSuite) SetupSuite() {
-	s.Require().NoError(os.RemoveAll(dataDir))
-	s.Require().NoError(os.Mkdir(dataDir, 0777))
+	s.Require().NoError(os.RemoveAll(path.Dir(testDataDir)))
+	s.Require().NoError(os.MkdirAll(testDataDir, 0777))
 }
 
 func (s *fileSuite) TearDownSuite() {
-	s.Require().NoError(os.RemoveAll(dataDir))
+	s.Require().NoError(os.RemoveAll(path.Dir(testDataDir)))
 }
 
 func (s *fileSuite) Test_NewFile() {
-	f, err := os.CreateTemp(dataDir, "*")
+	f, err := os.CreateTemp(testDataDir, "*")
 	defer func() { s.Require().NoError(f.Close()) }()
 	s.Require().NoError(err)
 
 	file := NewFile(f)
 
 	s.NotNil(file)
+	s.NotNil(file.File)
+	s.NotNil(file.regEx)
 }
 
 func (s *fileSuite) Test_LogFile_IndexTime_Success() {
-	// add some old logs as well
-	now := time.Now().UTC()
-	// add some old logs
-	logs := "127.0.0.1 user-identifier frank [02/Mar/2022:05:30:00 +0000] \"GET /api/endpoint HTTP/1.0\" 500 123\n"
-	logs += "127.0.0.1 user-identifier frank [02/Mar/2022:05:35:00 +0000] \"GET /api/endpoint HTTP/1.0\" 500 123\n"
-	// add some new logs
-	numberOfNewLogs := 7
-	for i := 0; i < numberOfNewLogs; i++ {
-		logs += fmt.Sprintf(
-			"127.0.0.1 user-identifier frank [%v] \"GET /api/endpoint HTTP/1.0\" 500 123\n",
-			now.Add(-time.Duration(numberOfNewLogs-i)*time.Minute).Format(dateTimeFormat),
-		)
-	}
-	f, err := os.CreateTemp(dataDir, "*-http.log")
+	logs := `127.0.0.1 user-identifier frank [02/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [02/Mar/2022:05:35:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [03/Mar/2022:10:00:10 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [03/Mar/2022:10:00:20 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [03/Mar/2022:10:01:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [03/Mar/2022:10:01:20 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+127.0.0.1 user-identifier frank [03/Mar/2022:10:02:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123
+`
+	now, err := time.Parse(dateTimeFormat, "03/Mar/2022:10:05:00 +0000")
+	s.Require().NoError(err)
+	f := s.createLogs(logs)
 	defer func() { s.Require().NoError(f.Close()) }()
-	s.Require().NoError(err)
-	_, err = f.WriteString(logs)
-	s.Require().NoError(err)
 	file := NewFile(f)
 	s.NotNil(file)
-
-	lineLen := int64(97)
-	for i := 0; i < numberOfNewLogs; i++ {
-		lookupTime := time.Now().UTC().Add(-time.Duration(numberOfNewLogs-i) * time.Minute)
-		offset, err := file.IndexTime(lookupTime)
-		expectedOffset := lineLen*int64(i) + int64(i)
-		oldOffset := lineLen*2 + 2
-
-		s.NoError(err)
-		s.Equal(expectedOffset, offset-oldOffset)
+	tests := []struct {
+		name           string
+		expectedOffset int64
+		expectedLog    string
+		timeLookup     time.Time
+	}{
+		{
+			name:           "Last 3 Minutes",
+			timeLookup:     now.Add(-3 * time.Minute),
+			expectedOffset: 588,
+			expectedLog:    `127.0.0.1 user-identifier frank [03/Mar/2022:10:02:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+		},
+		{
+			name:           "Last 4 Minutes",
+			timeLookup:     now.Add(-4 * time.Minute),
+			expectedOffset: 392,
+			expectedLog:    `127.0.0.1 user-identifier frank [03/Mar/2022:10:01:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+		},
+		{
+			name:           "Last 5 Minutes",
+			timeLookup:     now.Add(-5 * time.Minute),
+			expectedOffset: 196,
+			expectedLog:    `127.0.0.1 user-identifier frank [03/Mar/2022:10:00:10 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+		},
+		{
+			name:           "Last 2 Days From Beginning",
+			timeLookup:     now.Add(-2 * time.Hour * 24),
+			expectedOffset: 0,
+			expectedLog:    `127.0.0.1 user-identifier frank [02/Mar/2022:05:30:00 +0000] "GET /api/endpoint HTTP/1.0" 500 123`,
+		},
+		{
+			name:           "Last Minute No Logs",
+			timeLookup:     now.Add(-time.Minute),
+			expectedOffset: -1,
+			expectedLog:    ``,
+		},
 	}
-}
+	for _, test := range tests {
+		s.Run(test.name, func() {
+			offset, err := file.IndexTime(test.timeLookup)
+			log := s.readLogAt(f, offset)
 
-func (s *fileSuite) Test_LogFile_IndexTime_TinyDifference() {
-	// prove the very small difference in seconds
-}
-
-func (s *fileSuite) Test_LogFile_IndexTime_NoLogs() {
-	now := time.Now().UTC()
-	numberOfLogs := 7
-	logs := ""
-	for i := 0; i < numberOfLogs; i++ {
-		logs += fmt.Sprintf(
-			"127.0.0.1 user-identifier frank [%v] \"GET /api/endpoint HTTP/1.0\" 500 123\n",
-			now.Add(-time.Duration(numberOfLogs-i)*time.Hour).Format(dateTimeFormat),
-		)
+			s.NoError(err)
+			s.Equal(test.expectedOffset, offset)
+			s.Equal(test.expectedLog, log)
+		})
 	}
-	f, err := os.CreateTemp(dataDir, "*-http.log")
-	defer func() { s.Require().NoError(f.Close()) }()
-	s.Require().NoError(err)
-	_, err = f.WriteString(logs)
-	s.Require().NoError(err)
-	file := NewFile(f)
-	s.NotNil(file)
-
-	lookupTime := time.Now().UTC().Add(-1 * time.Minute)
-	offset, err := file.IndexTime(lookupTime)
-
-	s.NoError(err)
-	s.Equal(int64(-1), offset)
 }
 
 func (s *fileSuite) Test_LogFile_IndexTime_Error() {
-	logs := "some invalid log line\n"
-	f, err := os.CreateTemp(dataDir, "*-http.log")
+	f := s.createLogs("some invalid log line\n")
 	defer func() { s.Require().NoError(f.Close()) }()
-	s.Require().NoError(err)
-	_, err = f.WriteString(logs)
-	s.Require().NoError(err)
 	file := NewFile(f)
 	s.NotNil(file)
 
@@ -119,13 +121,10 @@ func (s *fileSuite) Test_LogFile_IndexTime_Error() {
 
 func (s *fileSuite) Test_LogFile_seekLine() {
 	data := "some\ntest\nstring\n"
-	f, err := os.CreateTemp(dataDir, "*")
+	f := s.createLogs(data)
 	defer func() { s.Require().NoError(f.Close()) }()
-	s.Require().NoError(err)
-	_, err = f.WriteString(data)
-	s.Require().NoError(err)
 
-	_, err = f.Seek(8, io.SeekStart)
+	_, err := f.Seek(8, io.SeekStart)
 	s.NoError(err)
 	file := NewFile(f)
 	s.NotNil(file)
@@ -230,25 +229,53 @@ func (s *fileSuite) Test_LogFile_parseLogTime_Error() {
 	}
 }
 
+// createLogs stores incoming logs in a temporary file
+// make sure the incoming logs end with a newline
+// otherwise future scans might hang.
+func (s *fileSuite) createLogs(logs string) *os.File {
+	file, err := os.CreateTemp(testDataDir, "*-http.log")
+	s.Require().NoError(err)
+	_, err = file.WriteString(logs)
+	s.Require().NoError(err)
+	return file
+}
+
+// readLogAt reads 1 log line at a given offset from a given file
+func (s *fileSuite) readLogAt(file *os.File, offset int64) string {
+	if offset < 0 {
+		return ""
+	}
+
+	_, err := file.Seek(offset, io.SeekStart)
+	s.Require().NoError(err)
+
+	scanner := bufio.NewScanner(file)
+	scanner.Scan()
+	return scanner.Text()
+}
+
 func TestLogFile(t *testing.T) {
 	suite.Run(t, new(fileSuite))
 }
 
-// generate the big log file to be able to benchmark properly
+// Generate the big log file to be able to benchmark properly
+// and make sure to store it inside benchDataDir
 func BenchmarkSearch(b *testing.B) {
-	f, err := os.Open(path.Join(dataDir, "http-1.log"))
-	defer func() { assert.NoError(b, f.Close()) }()
-	assert.NoError(b, err)
+	// log-generator stores the big data in http-1.log
+	f, err := os.Open(path.Join(benchDataDir, "http-1.log"))
+	defer func() { require.NoError(b, f.Close()) }()
+	require.NoError(b, err)
 	file := NewFile(f)
-	assert.NotNil(b, file)
+	require.NotNil(b, file)
 	b.ResetTimer()
 
-	// look up last minutes in ascending
 	// we don't care about the offset, we only want to benchmark
 	// and check for execution time and memory footprint
-	lookupTime := time.Now().UTC().Add(-27 * time.Minute)
-	_, err = file.IndexTime(lookupTime)
+	for i := 0; i < b.N; i++ {
+		lookupTime := time.Now().UTC().Add(-time.Duration(i) * time.Minute)
+		_, err = file.IndexTime(lookupTime)
+		require.NoError(b, err)
+	}
 
-	assert.NoError(b, err)
 	b.ReportAllocs()
 }

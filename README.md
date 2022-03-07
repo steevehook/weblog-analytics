@@ -34,7 +34,7 @@ go run cmd/log-reader/main.go -d <path/to/log/files> -t <last_n_minutes>
 # runs all the tests present in test files
 make test
 # generate testdata for the benchmark first
-go run cmd/log-generator/main.go -dir logging
+go run cmd/log-generator/main.go -dir logging/bench
 # runs all the benchmarks present in test files
 make bench
 ```

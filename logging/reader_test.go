@@ -6,21 +6,21 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
-type logReaderSuite struct {
+type readerSuite struct {
 	suite.Suite
 }
 
-func (s *logReaderSuite) SetupSuite() {
+func (s *readerSuite) SetupSuite() {
 }
 
-func (s *logReaderSuite) SetupTest() {
+func (s *readerSuite) SetupTest() {
 }
 
-func (s *logReaderSuite) Test_NewLogReader() {
+func (s *readerSuite) Test_NewLogReader() {
 }
 
 func TestLogReader(t *testing.T) {
-	suite.Run(t, new(logReaderSuite))
+	suite.Run(t, new(readerSuite))
 }
 
 func BenchmarkLogReader(b *testing.B) {
